@@ -25,15 +25,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const stored = localStorage.getItem('user');
-    if (stored) setUser(JSON.parse(stored));
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      setUser({ ...parsed, user_id: String(parsed.user_id) });
+    }
   }, []);
 
   const save = (data: any) => {
     localStorage.setItem('access_token', data.access_token);
     localStorage.setItem('refresh_token', data.refresh_token);
-    localStorage.setItem('user', JSON.stringify(data));
+    localStorage.setItem('user', JSON.stringify({ ...data, user_id: String(data.user_id) }));
     setToken(data.access_token);
-    setUser(data);
+    setUser({ ...data, user_id: String(data.user_id) });
   };
 
   const login = async (email: string, password: string) => {

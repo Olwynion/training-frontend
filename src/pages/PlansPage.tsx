@@ -8,6 +8,7 @@ interface Plan {
   name: string;
   cycle_number: number;
   progress_counter: number;
+  days?: any[];
 }
 
 export default function PlansPage() {
@@ -38,25 +39,39 @@ export default function PlansPage() {
 
   return (
     <div>
-      <h1>Тренировочные планы</h1>
-      <form onSubmit={create} style={{ display: 'flex', gap: 8, marginTop: 16, marginBottom: 24 }}>
+      <h1 className="text-xl font-bold mb-4">Планы тренировок</h1>
+
+      <form onSubmit={create} className="flex gap-2 mb-4">
         <input placeholder="Название плана" value={name} onChange={(e) => setName(e.target.value)}
-          style={{ padding: 8, border: '1px solid #ddd', borderRadius: 4, flex: 1 }} />
-        <button type="submit" style={{ padding: '8px 16px', background: '#1a1a2e', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer' }}>
+          className="flex-1 px-3 py-2.5 border border-[var(--color-border)] rounded-lg text-sm outline-none focus:border-[var(--color-primary)]" />
+        <button type="submit" className="px-4 py-2.5 bg-[var(--color-primary)] text-white rounded-lg text-sm font-medium cursor-pointer whitespace-nowrap hover:bg-[var(--color-primary-dark)] transition-colors">
           Создать
         </button>
       </form>
-      <div style={{ display: 'grid', gap: 8 }}>
+
+      <div className="space-y-2">
         {plans.map((p) => (
-          <div key={p.id} style={{ background: '#fff', padding: 12, borderRadius: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Link to={`/plans/${p.id}`} style={{ textDecoration: 'none', color: '#1a1a2e' }}>
-              <strong>{p.name}</strong> — цикл {p.cycle_number}/4, прогресс: {p.progress_counter}
+          <div key={p.id} className="bg-[var(--color-surface)] rounded-xl border border-[var(--color-border)] p-4">
+            <Link to={`/plans/${p.id}`} className="no-underline text-inherit block">
+              <p className="font-medium text-sm">{p.name}</p>
+              <p className="text-xs text-[var(--color-text-secondary)] mt-1">
+                Цикл {p.cycle_number}/4 · Прогресс: {p.progress_counter} · Дней: {p.days?.length || 0}
+              </p>
             </Link>
-            <button onClick={() => remove(p.id)} style={{ background: '#e63946', color: '#fff', border: 'none', padding: '4px 10px', borderRadius: 4, cursor: 'pointer' }}>
+            <button onClick={() => remove(p.id)}
+              className="mt-2 text-xs px-3 py-1.5 bg-red-50 text-[var(--color-error)] rounded-lg cursor-pointer border-none">
               Удалить
             </button>
           </div>
         ))}
+        {plans.length === 0 && (
+          <div className="text-center py-8">
+            <p className="text-sm text-[var(--color-text-secondary)] mb-4">У вас пока нет планов</p>
+            <Link to="/ai-generate" className="inline-block px-4 py-2.5 bg-[var(--color-primary)] text-white rounded-lg text-sm font-medium no-underline">
+              🤖 Сгенерировать первый план
+            </Link>
+          </div>
+        )}
       </div>
     </div>
   );
