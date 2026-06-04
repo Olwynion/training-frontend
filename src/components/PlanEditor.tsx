@@ -182,6 +182,27 @@ export default function PlanEditor({ plan, onSaved }: PlanEditorProps) {
     setSaving(true);
     setError(null);
     try {
+      // 1. Create new exercises (exercise_id = 0 with a name)
+      const exIdMap: Record<string, number> = {};
+      for (const day of days) {
+        for (const ex of day.exercises) {
+          if (ex.exercise_id <= 0 && ex.exercise_name.trim()) {
+            const key = ex.exercise_name.trim();
+            if (!exIdMap[key]) {
+              const { data: created } = await training.createExercise({
+                userId: user.user_id,
+                name: key,
+                defaultOneRm: ex.one_rm ?? 0,
+                muscleGroup: 0,
+              });
+              exIdMap[key] = created.id;
+            }
+            ex.exercise_id = exIdMap[key];
+          }
+        }
+      }
+
+      // 2. Save plan days
       const body = {
         userId: user.user_id,
         days: days.map((d, di) => ({
@@ -198,22 +219,13 @@ export default function PlanEditor({ plan, onSaved }: PlanEditorProps) {
           })),
         })),
       };
-      const res = await training.updatePlanDays(plan.id, body);
-      const updatedDays: any[] = res.data?.days || [];
+      await training.updatePlanDays(plan.id, body);
 
-      const oneRmEntries: { exerciseId: number; oneRm: number }[] = [];
-      days.forEach((d, di) => {
-        d.exercises.forEach((e, ei) => {
-          const rm = e.one_rm ?? 0;
-          if (rm <= 0) return;
-          let eid = e.exercise_id;
-          if (eid <= 0) {
-            const mapped = updatedDays[di]?.exercises?.[ei];
-            if (mapped) eid = mapped.exerciseId ?? mapped.exercise_id;
-          }
-          if (eid > 0) oneRmEntries.push({ exerciseId: eid, oneRm: rm });
-        });
-      });
+      // 3. Save 1RM (all exercises now have real IDs)
+      const oneRmEntries: { exerciseId: number; oneRm: number }[] = days.flatMap(d =>
+        d.exercises.filter(e => e.exercise_id > 0 && (e.one_rm ?? 0) > 0)
+          .map(e => ({ exerciseId: e.exercise_id, oneRm: e.one_rm! }))
+      );
       if (oneRmEntries.length > 0) {
         await training.saveOneRm({ userId: user.user_id, entries: oneRmEntries });
       }
