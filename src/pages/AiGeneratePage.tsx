@@ -27,6 +27,8 @@ export default function AiGeneratePage() {
   const [showHistory, setShowHistory] = useState(false);
   const [builtIn, setBuiltIn] = useState<any[]>([]);
   const [selectedExercises, setSelectedExercises] = useState<number[]>([]);
+  const [inputExercises, setInputExercises] = useState<any[]>([]);
+  const [idMap, setIdMap] = useState<Record<number, number>>({});
   const [daysPerWeek, setDaysPerWeek] = useState(3);
   const [programType, setProgramType] = useState('fullbody');
   const [focusGroup, setFocusGroup] = useState(0);
@@ -51,9 +53,12 @@ export default function AiGeneratePage() {
             .filter((e: any) => e.muscle_group === fg)
             .map((e: any) => e.id);
           setSelectedExercises(matching);
+        } else {
+          setSelectedExercises(builtInRes.data.map((e: any) => e.id));
         }
       } else {
         setPrefsLoaded(true);
+        setSelectedExercises(builtInRes.data.map((e: any) => e.id));
       }
     });
   }, [user]);
@@ -78,13 +83,22 @@ export default function AiGeneratePage() {
     setError('');
     setResult(null);
     try {
-      const exercises = builtIn
+      let rawEx = builtIn
         .filter((e) => selectedExercises.includes(e.id))
-        .map((e) => ({
-          name: e.name,
-          oneRm: e.default_one_rm,
-          muscleGroup: e.muscle_group,
+        .map((e: any) => ({
+          dbId: e.id, name: e.name, oneRm: e.default_one_rm, muscleGroup: e.muscle_group,
         }));
+      if (!rawEx.length) rawEx = builtIn.map((e: any) => ({
+        dbId: e.id, name: e.name, oneRm: e.default_one_rm, muscleGroup: e.muscle_group,
+      }));
+      const mapping: Record<number, number> = {};
+      const exercises = rawEx.map((e: any, i: number) => {
+        const seqId = i + 1;
+        mapping[seqId] = e.dbId;
+        return { id: seqId, name: e.name, oneRm: e.oneRm, muscleGroup: e.muscleGroup };
+      });
+      setIdMap(mapping);
+      setInputExercises(exercises);
 
       const body = {
         userId: user.user_id,
@@ -110,41 +124,39 @@ export default function AiGeneratePage() {
     setError('');
     setLoading(true);
     try {
+      console.log('AI response:', result.plan_json);
       const planJson = JSON.parse(result.plan_json);
+
+      if (planJson.days) {
+        for (const d of planJson.days) {
+          d.exercises = d.exercises || d.упражнения || [];
+        }
+      }
+
       const { data: plan } = await training.createPlan({ userId: user.user_id, name: planName });
 
-      if (planJson.days?.length) {
-        const allExercises = planJson.days.flatMap((d: any) => d.exercises || []);
-        const uniqueNames = [...new Set(allExercises.map((e: any) => e.name))];
+      const daysWithExercises = (planJson.days || []).filter((d: any) => d.exercises.length > 0);
+      const emptyDays = (planJson.days || []).filter((d: any) => !d.exercises.length);
 
-        const [builtIn, userEx] = await Promise.all([
-          training.getBuiltInExercises(),
-          training.getExercises(user.user_id),
-        ]);
-        const existing = [...(builtIn.data || []), ...(userEx.data || [])];
+      if (emptyDays.length > 0) {
+        setError(`Внимание: ${emptyDays.length} день(дня) не содержат упражнений. Они будут пропущены.`);
+      }
 
-        const exerciseMap: Record<string, number> = {};
-        for (const name of uniqueNames) {
-          const match = existing.find((e: any) => e.name === name);
-          if (match) {
-            exerciseMap[name] = match.id;
-          } else {
-            try {
-              const inputEx = allExercises.find((e: any) => e.name === name);
-              const defaultOneRm = inputEx?.oneRm ?? inputEx?.one_rm ?? 0;
-              const muscleGroup = inputEx?.muscleGroup ?? inputEx?.muscle_group ?? 1;
-              const { data: ex } = await training.createExercise({
-                userId: user.user_id, name,
-                defaultOneRm, muscleGroup,
-              });
-              exerciseMap[name] = ex.id;
-            } catch {
-              exerciseMap[name] = 0;
-            }
-          }
+      if (daysWithExercises.length) {
+        let exList = inputExercises;
+        if (!exList.length) {
+          const [builtIn, userEx] = await Promise.all([
+            training.getBuiltInExercises(),
+            training.getExercises(user.user_id),
+          ]);
+          exList = [...(builtIn.data || []), ...(userEx.data || [])].map((e: any) => ({
+            id: e.id, name: e.name, oneRm: e.default_one_rm, muscleGroup: e.muscle_group,
+          }));
         }
+        const exercisedById: Record<number, any> = {};
+        for (const ex of exList) exercisedById[idMap[ex.id] || ex.id] = ex;
 
-        const days = planJson.days.map((d: any, di: number) => {
+        const days = daysWithExercises.map((d: any, di: number) => {
           const abbr = (d.day || '').split(' ')[0].toUpperCase();
           const dayName = DAY_ABBR[abbr] || d.day;
           const dayFocus = d.focus != null ? d.focus : (focusGroup || 0);
@@ -153,12 +165,19 @@ export default function AiGeneratePage() {
             dayName,
             focusGroup: dayFocus,
             sortOrder: di,
-            exercises: (d.exercises || []).map((e: any, ei: number) => ({
-              id: 0,
-              exerciseId: exerciseMap[e.name] ?? 0,
-              sets: e.sets ?? 3,
-              sortOrder: ei,
-            })),
+            exercises: d.exercises.map((e: any, ei: number) => {
+              const maxId = Object.keys(idMap).length;
+              const seqId = e.id > 0 && e.id <= maxId ? e.id : 0;
+              const dbId = idMap[seqId] || 0;
+              const exData = exercisedById[dbId] || exList.find((x: any) => x.name === e.name);
+              return {
+                id: 0,
+                exerciseId: dbId,
+                exerciseName: exData?.name || 'Unknown',
+                sets: e.sets ?? 3,
+                sortOrder: ei,
+              };
+            }).filter((ex: any) => ex.exerciseName !== 'Unknown'),
           };
         });
 
