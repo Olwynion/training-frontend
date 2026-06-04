@@ -25,6 +25,7 @@ interface ExerciseData {
   exercise_name: string;
   sets: number;
   sort_order: number;
+  one_rm?: number;
 }
 
 const FOCUS_OPTIONS = [
@@ -59,6 +60,14 @@ export default function PlanEditor({ plan, onSaved }: PlanEditorProps) {
         map[ex.id] = { name: ex.name, defaultOneRm: ex.default_one_rm ?? 0 };
       });
       setAllExercises(map);
+
+      setDays(prev => prev.map(d => ({
+        ...d,
+        exercises: d.exercises.map(e => ({
+          ...e,
+          one_rm: e.one_rm ?? map[e.exercise_id]?.defaultOneRm ?? 0,
+        })),
+      })));
     });
   }, [user]);
 
@@ -91,6 +100,7 @@ export default function PlanEditor({ plan, onSaved }: PlanEditorProps) {
       exercise_name: '',
       sets: 3,
       sort_order: copy[dayIdx].exercises.length,
+      one_rm: 0,
     });
     setDays(copy);
   };
@@ -110,11 +120,17 @@ export default function PlanEditor({ plan, onSaved }: PlanEditorProps) {
     setDays(copy);
   };
 
-  const updateExerciseOneRm = (exerciseId: number, oneRm: number) => {
-    setAllExercises(prev => ({
-      ...prev,
-      [exerciseId]: { ...prev[exerciseId], defaultOneRm: oneRm },
-    }));
+  const updateExerciseOneRm = (dayIdx: number, exIdx: number, oneRm: number) => {
+    const copy = [...days];
+    copy[dayIdx].exercises[exIdx].one_rm = oneRm;
+    setDays(copy);
+    const exerciseId = copy[dayIdx].exercises[exIdx].exercise_id;
+    if (exerciseId > 0) {
+      setAllExercises(prev => ({
+        ...prev,
+        [exerciseId]: { ...(prev[exerciseId] || { name: '' }), defaultOneRm: oneRm },
+      }));
+    }
   };
 
   const handleDragStart = (dayIdx: number, exIdx: number) => {
@@ -160,6 +176,7 @@ export default function PlanEditor({ plan, onSaved }: PlanEditorProps) {
           exercises: d.exercises.map((e, ei) => ({
             id: e.id,
             exerciseId: e.exercise_id,
+            exerciseName: e.exercise_name,
             sets: e.sets,
             sortOrder: ei,
           })),
@@ -169,8 +186,8 @@ export default function PlanEditor({ plan, onSaved }: PlanEditorProps) {
 
       const oneRmEntries = days.flatMap(d =>
         d.exercises
-          .filter(e => e.exercise_id > 0 && e.exercise_id in allExercises)
-          .map(e => ({ exerciseId: e.exercise_id, oneRm: allExercises[e.exercise_id].defaultOneRm }))
+          .filter(e => (e.exercise_id > 0 || e.id > 0) && (e.one_rm ?? 0) > 0)
+          .map(e => ({ exerciseId: e.exercise_id || e.id, oneRm: e.one_rm! }))
       );
       if (oneRmEntries.length > 0) {
         await training.saveOneRm({ userId: user.user_id, entries: oneRmEntries });
@@ -183,6 +200,21 @@ export default function PlanEditor({ plan, onSaved }: PlanEditorProps) {
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleExerciseNameChange = (dayIdx: number, exIdx: number, value: string) => {
+    const copy = [...days];
+    copy[dayIdx].exercises[exIdx].exercise_name = value;
+    setDays(copy);
+  };
+
+  const handleExerciseIdChange = (dayIdx: number, exIdx: number, value: number) => {
+    const copy = [...days];
+    copy[dayIdx].exercises[exIdx].exercise_id = value;
+    if (value > 0 && allExercises[value]) {
+      copy[dayIdx].exercises[exIdx].exercise_name = allExercises[value].name;
+    }
+    setDays(copy);
   };
 
   return (
@@ -212,7 +244,12 @@ export default function PlanEditor({ plan, onSaved }: PlanEditorProps) {
                 className="flex items-center gap-2 p-2 bg-gray-50 rounded-lg cursor-grab active:cursor-grabbing"
               >
                 <span className="text-sm text-[var(--color-text-secondary)] cursor-grab">⠿</span>
-                <span className="flex-1 text-sm truncate">{ex.exercise_name || '(выберите ID)'}</span>
+                <input
+                  value={ex.exercise_name}
+                  onChange={(e) => handleExerciseNameChange(di, ei, e.target.value)}
+                  placeholder="Название упражнения"
+                  className="flex-1 px-2 py-1.5 border border-[var(--color-border)] rounded text-sm"
+                />
                 <div className="flex items-center gap-1 text-xs text-[var(--color-text-secondary)] whitespace-nowrap">
                   <span>Подх:</span>
                   <input
@@ -226,8 +263,8 @@ export default function PlanEditor({ plan, onSaved }: PlanEditorProps) {
                   <span>1RM:</span>
                   <input
                     type="number"
-                    value={allExercises[ex.exercise_id]?.defaultOneRm ?? ''}
-                    onChange={(e) => updateExerciseOneRm(ex.exercise_id, Number(e.target.value))}
+                    value={ex.one_rm ?? allExercises[ex.exercise_id]?.defaultOneRm ?? ''}
+                    onChange={(e) => updateExerciseOneRm(di, ei, Number(e.target.value))}
                     className="w-16 px-2 py-1.5 border border-[var(--color-border)] rounded text-sm text-center"
                   />
                 </div>
