@@ -3,17 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { aiApi, training } from '../api/client';
 
-const MUSCLE_LABELS: Record<number, string> = {
-  1: 'Грудные', 2: 'Спина', 3: 'Ноги', 4: 'Плечи', 5: 'Бицепс', 6: 'Трицепс', 7: 'Пресс',
-};
-
 const DAY_ABBR: Record<string, string> = {
   'ПН': 'Понедельник', 'ВТ': 'Вторник', 'СР': 'Среда', 'ЧТ': 'Четверг',
   'ПТ': 'Пятница', 'СБ': 'Суббота', 'ВС': 'Воскресенье',
-};
-
-const FOCUS_GROUPS_BY_MUSCLE: Record<number, number> = {
-  1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6, 7: 7,
 };
 
 export default function AiGeneratePage() {
@@ -32,7 +24,7 @@ export default function AiGeneratePage() {
   const [daysPerWeek, setDaysPerWeek] = useState(3);
   const [programType, setProgramType] = useState('fullbody');
   const [focusGroup, setFocusGroup] = useState(0);
-  const [prefsLoaded, setPrefsLoaded] = useState(false);
+
 
   useEffect(() => {
     Promise.all([
