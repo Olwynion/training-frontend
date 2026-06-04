@@ -6,6 +6,7 @@ import tailwindcss from '@tailwindcss/vite'
 export default defineConfig({
   plugins: [tailwindcss(), react()],
   server: { host: '0.0.0.0' },
+  base: '/training-frontend/',
   test: {
     environment: 'jsdom',
     globals: true,
