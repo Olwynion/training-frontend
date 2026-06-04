@@ -62,6 +62,8 @@ export const training = {
     api.post('/training/preferences', body),
   getPreferences: (userId: string) =>
     api.get(`/training/preferences/${userId}`),
+  getOneRm: (userId: string) =>
+    api.get(`/training/one-rm/${userId}`),
   saveOneRm: (body: any) =>
     api.post('/training/one-rm', body),
 };

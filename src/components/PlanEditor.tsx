@@ -49,15 +49,31 @@ export default function PlanEditor({ plan, onSaved }: PlanEditorProps) {
   const dragOverItem = useRef<number | null>(null);
   const [dragDayIdx, setDragDayIdx] = useState<number | null>(null);
 
+  const fetchOneRmData = async (userId: string) => {
+    try {
+      const res = await training.getOneRm(userId);
+      const oneRmMap: Record<number, number> = {};
+      if (res.data && Array.isArray(res.data)) {
+        res.data.forEach((entry: any) => {
+          oneRmMap[entry.exercise_id] = entry.one_rm;
+        });
+      }
+      return oneRmMap;
+    } catch {
+      return {};
+    }
+  };
+
   useEffect(() => {
     if (!user) return;
     Promise.all([
       training.getExercises(user.user_id),
       training.getBuiltInExercises(),
-    ]).then(([userRes, builtInRes]) => {
+      fetchOneRmData(user.user_id),
+    ]).then(([userRes, builtInRes, oneRmMap]) => {
       const map: Record<number, { name: string; defaultOneRm: number }> = {};
       [...(userRes.data || []), ...(builtInRes.data || [])].forEach((ex: any) => {
-        map[ex.id] = { name: ex.name, defaultOneRm: ex.default_one_rm ?? 0 };
+        map[ex.id] = { name: ex.name, defaultOneRm: oneRmMap[ex.id] ?? ex.default_one_rm ?? 0 };
       });
       setAllExercises(map);
 
@@ -65,7 +81,7 @@ export default function PlanEditor({ plan, onSaved }: PlanEditorProps) {
         ...d,
         exercises: d.exercises.map(e => ({
           ...e,
-          one_rm: e.one_rm ?? map[e.exercise_id]?.defaultOneRm ?? 0,
+          one_rm: e.one_rm ?? oneRmMap[e.exercise_id] ?? map[e.exercise_id]?.defaultOneRm ?? 0,
         })),
       })));
     });
@@ -182,13 +198,22 @@ export default function PlanEditor({ plan, onSaved }: PlanEditorProps) {
           })),
         })),
       };
-      await training.updatePlanDays(plan.id, body);
+      const res = await training.updatePlanDays(plan.id, body);
+      const updatedDays: any[] = res.data?.days || [];
 
-      const oneRmEntries = days.flatMap(d =>
-        d.exercises
-          .filter(e => (e.exercise_id > 0 || e.id > 0) && (e.one_rm ?? 0) > 0)
-          .map(e => ({ exerciseId: e.exercise_id || e.id, oneRm: e.one_rm! }))
-      );
+      const oneRmEntries: { exerciseId: number; oneRm: number }[] = [];
+      days.forEach((d, di) => {
+        d.exercises.forEach((e, ei) => {
+          const rm = e.one_rm ?? 0;
+          if (rm <= 0) return;
+          let eid = e.exercise_id;
+          if (eid <= 0) {
+            const mapped = updatedDays[di]?.exercises?.[ei];
+            if (mapped) eid = mapped.exerciseId ?? mapped.exercise_id;
+          }
+          if (eid > 0) oneRmEntries.push({ exerciseId: eid, oneRm: rm });
+        });
+      });
       if (oneRmEntries.length > 0) {
         await training.saveOneRm({ userId: user.user_id, entries: oneRmEntries });
       }
