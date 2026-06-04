@@ -147,10 +147,11 @@ export default function AiGeneratePage() {
         const days = planJson.days.map((d: any, di: number) => {
           const abbr = (d.day || '').split(' ')[0].toUpperCase();
           const dayName = DAY_ABBR[abbr] || d.day;
+          const dayFocus = d.focus != null ? d.focus : (focusGroup || 0);
           return {
             id: 0,
             dayName,
-            focusGroup: focusGroup || 0,
+            focusGroup: dayFocus,
             sortOrder: di,
             exercises: (d.exercises || []).map((e: any, ei: number) => ({
               id: 0,
